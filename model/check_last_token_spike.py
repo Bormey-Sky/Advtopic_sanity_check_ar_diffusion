@@ -28,6 +28,7 @@ def main():
     for s in statements:
         text = s["text"].rstrip(".")
         v = saliency_vector(model, "pythia_160m", tok, s["text"], "cuda")
+        print(f"id={s['id']}  no-period argmax_pos={v.argmax().item()} / {len(v)}")
         argmax_pos = v.argmax().item()
         is_last = argmax_pos == len(v) - 1
         last_is_max += is_last
