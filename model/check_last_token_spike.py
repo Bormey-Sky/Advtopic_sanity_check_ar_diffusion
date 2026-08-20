@@ -26,6 +26,7 @@ def main():
 
     last_is_max = 0
     for s in statements:
+        text = s["text"].rstrip(".")
         v = saliency_vector(model, "pythia_160m", tok, s["text"], "cuda")
         argmax_pos = v.argmax().item()
         is_last = argmax_pos == len(v) - 1
