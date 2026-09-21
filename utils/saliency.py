@@ -1,17 +1,14 @@
 # utils/saliency.py
-import torch
-from utils.scoring import get_embeds, normpll
+"""Saliency attribution for MDLM: gradient of the 4-branch,
+softmax-weighted stance score (Option C; utils.scoring.stance_score_mdlm)
+w.r.t. statement-token embeddings."""
+from utils.scoring import stance_score_mdlm
 
-def attribute(model, name, tok, statement_text, device):
+
+def attribute(model, tok, statement_text, device, mask_embedding=None):
     """Returns per-statement-token saliency scores."""
-    ids = tok(statement_text + " I strongly agree with this.",
-               return_tensors="pt").input_ids.to(device)
-    n_stmt = len(tok(statement_text).input_ids)
-
-    embeds = get_embeds(model, name, ids).detach().clone()
-    embeds.requires_grad_(True)
-
-    score = normpll(model, name, embeds, ids, n_stmt, device)
-    score.backward()
-
-    return embeds.grad[0][:n_stmt].norm(dim=-1)
+    stance, stmt_embeds = stance_score_mdlm(
+        model, tok, statement_text, device, mask_embedding
+    )
+    stance.backward()
+    return stmt_embeds.grad[0].norm(dim=-1)
