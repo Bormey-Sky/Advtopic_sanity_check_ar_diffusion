@@ -2,7 +2,8 @@
 """Integrated Gradients attribution for MDLM (Sundararajan et al.,
 2017). Interpolates statement-token embeddings between a mask-token
 baseline and the real embeddings, accumulating gradients of the same
-4-branch stance score (utils.scoring.stance_score_from_embeds) that
+contrastive stance score (utils.scoring.stance_score_from_embeds --
+Option B, strongly_agree minus strongly_disagree, no softmax) that
 Saliency and Occlusion attribute, so all three methods explain the
 same target function."""
 import torch

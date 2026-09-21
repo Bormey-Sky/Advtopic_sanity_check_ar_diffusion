@@ -5,12 +5,15 @@ differentiable through the embeds bypass so Saliency/IG can backprop
 into it.
 
 stance_score_from_embeds() / stance_score_mdlm() are the actual target
-function attribution runs against: Option C, the poster's full
-4-branch softmax-weighted combine (score_statement() in the poster's
-evaluation_v2.py), reimplemented here as a differentiable whole-string
-PLL per branch so gradients can flow through it -- the poster's own
-compute_pll() runs under torch.no_grad() and can't be reused directly
-for attribution.
+function attribution runs against: Option B, a contrastive margin --
+PLL("... I strongly agree with this.") minus PLL("... I strongly
+disagree with this."). No softmax: the poster's own prior work found
+softmax over NormPLL values methodologically indefensible (NormPLL
+values aren't competing events in a shared probability space) and
+replaced it with a discrete argmax for PCT scoring. Argmax isn't
+differentiable, so it can't serve as attribution's target either --
+this contrastive margin is the citable alternative (cf. Nangia et al.,
+2020, CrowS-Pairs: PLL contrast between paired framings, no softmax).
 
 stance_score_from_embeds() takes the statement embeddings as a plain
 argument rather than computing them internally, so Integrated
@@ -20,7 +23,7 @@ wants the real embeddings with grad tracking."""
 import torch
 import torch.nn.functional as F
 
-from utils.constants import STANCE_ORDER, STANCE_WEIGHTS, AXIS_MAX, MDLM_MASK_ID
+from utils.constants import MDLM_MASK_ID
 from utils.preprocess import (
     get_statement_ids,
     suffix_ids,
@@ -50,8 +53,8 @@ def dit_backbone_forward_from_embeds(backbone, x, sigma):
 def score_mdlm(model, embeds, ids, mask_embedding, device):
     """Whole-string masked PLL for ONE stance branch, differentiable.
     Averages log-prob of the true token over every position (statement
-    + suffix), masking one position at a time. Feeds into the 4-branch
-    combine below -- not a target on its own."""
+    + suffix), masking one position at a time. Feeds into the
+    contrastive combine below -- not a target on its own."""
     L = ids.shape[1]
     total = 0.0
 
@@ -74,33 +77,26 @@ def get_mask_embedding(model, mdlm_mask_id, device):
 
 
 def stance_score_from_embeds(model, tok, stmt_ids, stmt_embeds, device, mask_embedding=None):
-    """Differentiable 4-branch stance score (Option C) for a given
+    """Differentiable contrastive stance score (Option B) for a given
     statement-ids tensor and a caller-supplied statement-embeddings
     tensor -- real (from stance_score_mdlm) or interpolated (from
-    Integrated Gradients). Matches the poster's score_statement():
-    whole-string masked PLL per stance branch, softmax-weighted combine
-    (STANCE_ORDER / STANCE_WEIGHTS / AXIS_MAX, utils.constants)."""
+    Integrated Gradients). strongly_agree branch minus strongly_disagree
+    branch; see module docstring for why (no softmax, no argmax)."""
     if mask_embedding is None:
         mask_embedding = get_mask_embedding(model, MDLM_MASK_ID, device)
 
-    branch_scores = []
-    for stance_key in STANCE_ORDER:
+    def branch_score(stance_key):
         suf_ids_t = suffix_ids(tok, stance_key).to(device)
         suf_embeds = get_embeddings(model, "mdlm_169m", suf_ids_t)
-
         ids = build_combined_ids(stmt_ids, suf_ids_t)
         embeds = build_combined_embeds(stmt_embeds, suf_embeds)
+        return score_mdlm(model, embeds, ids, mask_embedding, device)
 
-        branch_scores.append(score_mdlm(model, embeds, ids, mask_embedding, device))
-
-    raw = torch.stack(branch_scores)
-    probs = torch.softmax(raw, dim=0)
-    weights = torch.tensor(STANCE_WEIGHTS, device=device, dtype=raw.dtype)
-    return (probs * weights * AXIS_MAX).sum()
+    return branch_score("strongly_agree") - branch_score("strongly_disagree")
 
 
 def stance_score_mdlm(model, tok, statement_text, device, mask_embedding=None):
-    """Differentiable 4-branch stance score, starting from the real
+    """Differentiable contrastive stance score, starting from the real
     (non-interpolated) statement embeddings.
 
     Returns (stance, stmt_embeds): `stance` is a differentiable scalar

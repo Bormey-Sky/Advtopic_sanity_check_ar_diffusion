@@ -4,14 +4,15 @@ model's public forward with plain token ids, so it never needs the
 embeddings bypass Saliency/IG depend on. This is the architecture's
 gradient-free fallback method (Section 4.4).
 
-Computes the same 4-branch, softmax-weighted stance score as
-utils.scoring.stance_score_mdlm (Option C), ids-only and without
-gradients, so Occlusion attributes the identical target function as
-Saliency/IG (Adebayo et al., 2018)."""
+Computes the same contrastive stance score as
+utils.scoring.stance_score_from_embeds (Option B: strongly_agree minus
+strongly_disagree, no softmax), ids-only and without gradients, so
+Occlusion attributes the identical target function as Saliency/IG
+(Adebayo et al., 2018)."""
 import torch
 import torch.nn.functional as F
 
-from utils.constants import MDLM_MASK_ID, STANCE_ORDER, STANCE_WEIGHTS, AXIS_MAX
+from utils.constants import MDLM_MASK_ID
 from utils.preprocess import get_statement_ids, suffix_ids, build_combined_ids
 
 
@@ -33,19 +34,15 @@ def _branch_pll(model, ids, device):
 
 @torch.no_grad()
 def _stance_score(model, tok, stmt_ids, device):
-    """4-branch softmax-weighted stance score for a given (possibly
+    """Contrastive stance score (Option B) for a given (possibly
     occluded) statement-ids tensor -- ids-only counterpart of
-    utils.scoring.stance_score_mdlm."""
-    raw_scores = []
-    for stance_key in STANCE_ORDER:
+    utils.scoring.stance_score_from_embeds."""
+    def branch_score(stance_key):
         suf_ids = suffix_ids(tok, stance_key).to(device)
         ids = build_combined_ids(stmt_ids, suf_ids)
-        raw_scores.append(_branch_pll(model, ids, device))
+        return _branch_pll(model, ids, device)
 
-    raw = torch.tensor(raw_scores)
-    probs = torch.softmax(raw, dim=0)
-    weights = torch.tensor(STANCE_WEIGHTS)
-    return (probs * weights * AXIS_MAX).sum().item()
+    return branch_score("strongly_agree") - branch_score("strongly_disagree")
 
 
 @torch.no_grad()

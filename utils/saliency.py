@@ -1,7 +1,8 @@
 # utils/saliency.py
-"""Saliency attribution for MDLM: gradient of the 4-branch,
-softmax-weighted stance score (Option C; utils.scoring.stance_score_mdlm)
-w.r.t. statement-token embeddings."""
+"""Saliency attribution for MDLM: gradient of the contrastive stance
+score (Option B; utils.scoring.stance_score_mdlm -- strongly_agree
+minus strongly_disagree, no softmax) w.r.t. statement-token
+embeddings."""
 from utils.scoring import stance_score_mdlm
 
 
