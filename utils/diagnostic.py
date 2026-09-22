@@ -32,7 +32,7 @@ verdict for a whole method.
 import pandas as pd
 
 from utils.constants import RESULTS_DIR
-from utils.metrics import spearman, top_k_overlap
+from utils.metrics import content_positions, spearman, top_k_overlap
 from utils.store import run_filename
 
 
@@ -55,7 +55,23 @@ def _pairwise(run_a, run_b, use_abs, metric):
     utils.metrics, so this inherits their use_abs convention: True is
     mandatory whenever the method is Saliency (it's unsigned already,
     so this is a no-op for it), optional for IG/Occlusion, where it
-    chooses between a magnitude-only and a sign-sensitive reading."""
+    chooses between a magnitude-only and a sign-sensitive reading.
+
+    Punctuation is excluded before computing spearman() here, even
+    though utils.metrics.spearman() itself deliberately does NOT
+    exclude it by default. That full-vector choice was made for
+    cross-METHOD comparison (surfacing whether Saliency/IG/Occlusion
+    all key on the same attention-sink token, as a finding in itself)
+    -- this project's core analysis dropped that comparison in favor
+    of qualitative discussion, so the only thing spearman() feeds now
+    is this cross-CHECKPOINT test. A sink token that fires the same
+    way regardless of injected direction/dose would anchor one end of
+    the ranking identically in every checkpoint, inflating
+    sim(base, injected) for reasons unrelated to whether attribution
+    tracked the bias -- biasing the ordering check toward NOT
+    detecting a real, present sensitivity in the content tokens.
+    top_k_overlap() needs no change: it already filters through
+    content_positions() internally."""
     if metric not in ("spearman", "top_k_overlap"):
         raise ValueError(f"Unknown metric '{metric}'")
 
@@ -71,7 +87,10 @@ def _pairwise(run_a, run_b, use_abs, metric):
                 f"vectors position-for-position."
             )
         if metric == "spearman":
-            results[stmt_id] = spearman(scores_a, scores_b, use_abs=use_abs)
+            positions = content_positions(tokens_a)
+            a = [scores_a[i] for i in positions]
+            b = [scores_b[i] for i in positions]
+            results[stmt_id] = spearman(a, b, use_abs=use_abs)
         else:
             results[stmt_id] = top_k_overlap(scores_a, scores_b, tokens_a, use_abs=use_abs)
     return results
