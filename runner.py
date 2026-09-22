@@ -11,6 +11,8 @@ ignore mask_embedding -- random_baseline.py's own docstring anticipates
 this ("kept for a uniform calling convention in runner.py"), so the
 dispatch wrappers below exist to keep that convention true rather than
 branching on method name inside the loop."""
+import torch
+
 from utils.constants import MDLM_MASK_ID
 from utils.preprocess import load_statements, get_statement_ids
 from utils.scoring import get_mask_embedding
@@ -70,8 +72,9 @@ def run(model, tok, method_name, device):
         mask_embedding = get_mask_embedding(model, MDLM_MASK_ID, device)
 
     statements = load_statements()
+    total = len(statements)
     records = []
-    for stmt in statements:
+    for idx, stmt in enumerate(statements, start=1):
         if method_name in GRADIENT_METHODS:
             model.zero_grad(set_to_none=True)
 
@@ -95,4 +98,18 @@ def run(model, tok, method_name, device):
             "tokens": tokens,
             "scores": scores,
         })
+        print(f"  [{method_name}] {idx}/{total} statements done (id {stmt['id']})", flush=True)
+
+        # Statements vary in length, and IG/Occlusion each produce many
+        # distinctly-shaped intermediate tensors per statement (IG: 50
+        # interpolation steps; Occlusion: one masked copy per position).
+        # PyTorch's caching allocator keeps freed blocks around for
+        # reuse rather than releasing them immediately, so GPU memory
+        # can climb toward the ceiling over a long, variable-length
+        # statement loop even with no actual leak. Releasing unused
+        # cached blocks back to the allocator after each statement
+        # costs a few ms and reduces that risk for a 62-statement loop
+        # that can otherwise run over an hour.
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
     return records
