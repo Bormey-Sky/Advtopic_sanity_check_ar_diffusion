@@ -72,8 +72,15 @@ def score_mdlm(model, embeds, ids, mask_embedding, device):
 
 
 def get_mask_embedding(model, mdlm_mask_id, device):
+    """Detached deliberately: this is a fixed reference embedding (the
+    masking constant / IG baseline), not something Saliency or IG
+    should backprop into. Reusing the same tensor across multiple
+    backward() calls -- across statements (runner.py precomputes this
+    once per model) or across IG's own internal interpolation-step
+    loop -- would otherwise try to backward through its upstream graph
+    a second time after the first backward() already freed it."""
     ids = torch.tensor([[mdlm_mask_id]], device=device)
-    return get_embeddings(model, "mdlm_169m", ids)[0, 0, :]
+    return get_embeddings(model, "mdlm_169m", ids)[0, 0, :].detach()
 
 
 def stance_score_from_embeds(model, tok, stmt_ids, stmt_embeds, device, mask_embedding=None):
