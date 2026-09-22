@@ -1,0 +1,33 @@
+# attribution-sanity-check -- requirements
+#
+# Generated from the actual imports across the repo (model_loader.py,
+# utils/*.py, main.py, runner.py) -- not copied from the sibling poster
+# repo's dependency list, which pulls in libraries (captum, matplotlib,
+# python-pptx, ijson) this repo doesn't actually import.
+
+# --- core ML stack ---
+# torch is pinned exactly, not >=, because the flash-attn wheel below
+# is a prebuilt binary matched to this specific torch+CUDA build --
+# CLAUDE.md's confirmed-working combo (A100, cu128).
+torch==2.11.0
+transformers>=5.0  # model_loader.py patches around known 5.x breaking changes at import time
+peft
+scipy
+
+# --- analysis (utils/diagnostic.py, utils/store.py) ---
+pandas
+
+# --- NOT pip-installable from this file ---
+# flash-attn is a hard runtime dependency for MDLM (both modeling_mdlm.py
+# and modeling_mdlm_2.py import it, even the "no_flashattn" variant) but
+# has no official PyPI wheel for torch 2.11. Install separately, matching
+# your Colab session's *exact* Python/CUDA/torch tags -- Colab can change
+# its default Python version between sessions with zero user action, so
+# check sys.version before picking a wheel, don't assume it's still the
+# same as last time:
+#
+#   pip install <matching-wheel-url>
+#
+# Confirmed working: Python 3.13.15, torch 2.11.0+cu128, CUDA 12.8,
+# flash-attn 2.8.3 (cp313 wheel), A100. Wheels:
+#   https://github.com/lesj0610/flash-attention/releases/tag/v2.8.3-cu12-torch2.11
