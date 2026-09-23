@@ -17,6 +17,7 @@ token pushes" (sign-sensitive faithfulness check). Every function below
 takes use_abs explicitly rather than deciding internally, so callers
 make this choice on purpose rather than by accident.
 """
+import numpy as np
 import torch
 from scipy.stats import spearmanr
 
@@ -33,7 +34,13 @@ def content_positions(tokens):
 
 
 def _to_numpy(v):
-    return v.detach().cpu().numpy() if torch.is_tensor(v) else v
+    """Coerce to a numpy array. Tensors are detached/moved to CPU first;
+    everything else (lists, tuples, existing ndarrays) goes through
+    np.asarray so abs()/indexing downstream always see a real array,
+    not a plain Python list (abs() on a list raises TypeError)."""
+    if torch.is_tensor(v):
+        return v.detach().cpu().numpy()
+    return np.asarray(v)
 
 
 def spearman(a, b, use_abs=False):
