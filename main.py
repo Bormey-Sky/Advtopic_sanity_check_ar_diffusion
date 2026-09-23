@@ -55,8 +55,22 @@ def main():
 
     # Seeded once, before the statement loop, per random_baseline.py's
     # own docstring -- reseeding inside attribute() would give every
-    # statement of the same length an identical draw.
-    torch.manual_seed(RANDOM_SEED)
+    # statement of the same length an identical draw. The seed is offset
+    # per checkpoint (direction, dose) rather than fixed at RANDOM_SEED:
+    # main.py runs once per checkpoint as a fresh process, so a single
+    # fixed seed made every checkpoint draw the SAME sequence of "random"
+    # scores -- base/left/right/1k/5k all identical -- which silently
+    # collapsed every diagnostic comparison to a perfect (and therefore
+    # meaningless) similarity of 1.0. This only affects random_baseline;
+    # the other methods are deterministic and never depended on this seed.
+    _CHECKPOINT_SEED_OFFSET = {
+        ("base", "base"): 0,
+        ("left", "1k"): 1,
+        ("left", "5k"): 2,
+        ("right", "1k"): 3,
+        ("right", "5k"): 4,
+    }
+    torch.manual_seed(RANDOM_SEED + _CHECKPOINT_SEED_OFFSET[(args.direction, args.dose)])
 
     if args.direction == "base":
         model, tok = load_model(args.model, device=args.device)
